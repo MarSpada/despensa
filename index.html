@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Despensa — contador de calorías con código de barras gratis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root {
+    --paper: #f6f2ea;
+    --ink: #2b2f26;
+    --ink-soft: #565c4c;
+    --line: #d9d2c1;
+    --market: #8a6d3b;
+    --market-deep: #6b5329;
+    --tomato: #b34a3c;
+    --leaf: #4f6b4a;
+    --leaf-deep: #3a4f37;
+    --card: #fffdf8;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(43,47,38,0.035) 28px);
+  }
+
+  #app {
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 22px 18px 100px;
+    position: relative;
+  }
+
+  .masthead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 10px;
+    margin-bottom: 4px;
+  }
+
+  .masthead h1 {
+    font-size: 27px;
+    margin: 0;
+    letter-spacing: 0.01em;
+    font-weight: 600;
+  }
+
+  .masthead .date {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .subline {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin: 6px 0 22px;
+  }
+
+  .region-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+  .region-btn {
+    flex: 1;
+    padding: 9px 6px;
+    background: transparent;
+    border: 1px solid var(--ink);
+    border-radius: var(--radius);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .region-btn.active {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .goal-strip {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 20px;
+  }
+  .goal-strip .figure {
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1;
+    font-family: Georgia, serif;
+  }
+  .goal-strip .figure small {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--ink-soft);
+    font-family: 'Courier New', monospace;
+  }
+  .goal-strip .of-goal {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+  .goal-strip .of-goal input {
+    width: 56px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px;
+    color: var(--ink);
+    text-align: right;
+    padding: 1px 0;
+  }
+  .goal-bar-track {
+    height: 5px;
+    background: var(--line);
+    border-radius: 3px;
+    margin: 2px 0 18px;
+    overflow: hidden;
+  }
+  .goal-bar-fill {
+    height: 100%;
+    background: var(--leaf);
+    transition: width 0.4s ease;
+  }
+  .goal-bar-fill.over { background: var(--tomato); }
+
+  .macro-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .macro-chip {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 8px;
+    text-align: center;
+  }
+  .macro-chip .label {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+  }
+  .macro-chip .value {
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .macro-chip.protein .value { color: var(--tomato); }
+  .macro-chip.carbs .value { color: var(--market); }
+  .macro-chip.fat .value { color: var(--leaf-deep); }
+
+  .scan-cta {
+    width: 100%;
+    padding: 16px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 26px;
+  }
+  .scan-cta:active { background: var(--leaf-deep); }
+  .scan-cta svg { width: 18px; height: 18px; }
+
+  .section-label {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+  }
+
+  .entry {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px dashed var(--line);
+    gap: 10px;
+  }
+  .entry:last-child { border-bottom: none; }
+  .entry .name {
+    font-size: 15px;
+    line-height: 1.3;
+  }
+  .entry .meta {
+    font-family: 'Courier New', monospace;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .entry .kcal {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .entry .del {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+
+  .empty-note {
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    padding: 18px 0;
+    text-align: center;
+  }
+
+  /* Overlay del escáner */
+  .scanner-veil {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 22, 16, 0.94);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .scanner-veil.hidden { display: none; }
+  #reader {
+    width: 100%;
+    max-width: 380px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 2px solid var(--paper);
+  }
+  .scanner-hint {
+    color: var(--paper);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    margin-top: 16px;
+    text-align: center;
+    max-width: 320px;
+  }
+  .scanner-close {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: transparent;
+    border: 1px solid var(--paper);
+    color: var(--paper);
+    border-radius: var(--radius);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  /* Ficha de confirmación */
+  .sheet-veil {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 22, 16, 0.5);
+    z-index: 60;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .sheet-veil.hidden { display: none; }
+  .sheet {
+    background: var(--paper);
+    width: 100%;
+    max-width: 480px;
+    border-radius: 10px 10px 0 0;
+    padding: 22px 20px 28px;
+    border-top: 2px solid var(--ink);
+  }
+  .sheet h2 {
+    font-size: 19px;
+    margin: 0 0 3px;
+  }
+  .sheet .brand {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-bottom: 16px;
+  }
+  .sheet .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .sheet .stat {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    background: var(--card);
+  }
+  .sheet .stat .l {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+  }
+  .sheet .stat .v {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .servings-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+  }
+  .servings-row button {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--ink);
+    background: transparent;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .sheet-actions {
+    display: flex;
+    gap: 10px;
+  }
+  .sheet-actions button {
+    flex: 1;
+    padding: 13px;
+    border-radius: var(--radius);
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-add {
+    background: var(--leaf-deep);
+    color: var(--paper);
+    border: none;
+  }
+  .btn-cancel {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+  }
+
+  .status-line {
+    text-align: center;
+    padding: 30px 10px;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    font-style: italic;
+  }
+
+  .manual-link {
+    text-align: center;
+    margin-top: 10px;
+  }
+  .manual-link button {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    text-decoration: underline;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+  }
+
+  .manual-form {
+    display: none;
+    margin-top: 14px;
+    border-top: 1px dashed var(--line);
+    padding-top: 14px;
+  }
+  .manual-form.open { display: block; }
+  .manual-form input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--card);
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .manual-form .row2 {
+    display: flex;
+    gap: 8px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="masthead">
+    <h1>Despensa</h1>
+    <div class="date" id="todayDate"></div>
+  </div>
+  <div class="subline">escaneo de códigos de barras gratis · Open Food Facts</div>
+
+  <div class="region-row">
+    <button class="region-btn active" data-cc="es">España</button>
+    <button class="region-btn" data-cc="ar">Argentina</button>
+    <button class="region-btn" data-cc="world">Global</button>
+  </div>
+
+  <div class="goal-strip">
+    <div>
+      <div class="figure" id="totalKcal">0<small> kcal</small></div>
+    </div>
+    <div class="of-goal">
+      meta <input type="number" id="goalInput" value="2000"> kcal<br>
+      <span id="remainText">quedan 2000</span>
+    </div>
+  </div>
+  <div class="goal-bar-track"><div class="goal-bar-fill" id="goalBar" style="width:0%"></div></div>
+
+  <div class="macro-row">
+    <div class="macro-chip protein"><div class="label">PROTEÍNA</div><div class="value" id="totalProtein">0g</div></div>
+    <div class="macro-chip carbs"><div class="label">CARBOS</div><div class="value" id="totalCarbs">0g</div></div>
+    <div class="macro-chip fat"><div class="label">GRASA</div><div class="value" id="totalFat">0g</div></div>
+  </div>
+
+  <button class="scan-cta" id="scanBtn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+    Escanear código de barras
+  </button>
+
+  <div class="manual-link">
+    <button id="manualToggle">o escribí el número de código</button>
+  </div>
+  <div class="manual-form" id="manualForm">
+    <input type="text" id="manualBarcode" placeholder="ej. 8410076430119" inputmode="numeric">
+    <button class="scan-cta" style="margin-bottom:0;" id="manualLookup">Buscar</button>
+  </div>
+
+  <div style="height:26px;"></div>
+
+  <div class="section-label">REGISTRO DE HOY</div>
+  <div id="entryList">
+    <div class="empty-note">Todavía no registraste nada — escaneá algo de la despensa.</div>
+  </div>
+
+</div>
+
+<!-- Overlay del escáner -->
+<div class="scanner-veil hidden" id="scannerVeil">
+  <div id="reader"></div>
+  <div class="scanner-hint">Sostené el código de barras plano dentro del recuadro, a unos centímetros de la cámara.</div>
+  <button class="scanner-close" id="scannerClose">Cerrar</button>
+</div>
+
+<!-- Ficha de confirmación -->
+<div class="sheet-veil hidden" id="sheetVeil">
+  <div class="sheet" id="sheetContent"></div>
+</div>
+
+<script>
+(function() {
+  const state = {
+    country: 'es',
+    goal: 2000,
+    entries: [] // {id, name, brand, kcal, protein, carbs, fat, servingLabel}
+  };
+
+  const todayDate = document.getElementById('todayDate');
+  todayDate.textContent = new Date().toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  document.querySelectorAll('.region-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.country = btn.dataset.cc;
+    });
+  });
+
+  const goalInput = document.getElementById('goalInput');
+  goalInput.addEventListener('input', () => {
+    state.goal = parseInt(goalInput.value, 10) || 0;
+    render();
+  });
+
+  const manualToggle = document.getElementById('manualToggle');
+  const manualForm = document.getElementById('manualForm');
+  manualToggle.addEventListener('click', () => {
+    manualForm.classList.toggle('open');
+  });
+  document.getElementById('manualLookup').addEventListener('click', () => {
+    const code = document.getElementById('manualBarcode').value.trim();
+    if (code) lookupBarcode(code);
+  });
+
+  function render() {
+    const totals = state.entries.reduce((acc, e) => {
+      acc.kcal += e.kcal; acc.protein += e.protein; acc.carbs += e.carbs; acc.fat += e.fat;
+      return acc;
+    }, { kcal: 0, protein: 0, carbs: 0, fat: 0 });
+
+    document.getElementById('totalKcal').innerHTML = Math.round(totals.kcal) + '<small> kcal</small>';
+    document.getElementById('totalProtein').textContent = Math.round(totals.protein) + 'g';
+    document.getElementById('totalCarbs').textContent = Math.round(totals.carbs) + 'g';
+    document.getElementById('totalFat').textContent = Math.round(totals.fat) + 'g';
+
+    const remain = state.goal - totals.kcal;
+    document.getElementById('remainText').textContent = remain >= 0
+      ? 'quedan ' + Math.round(remain)
+      : Math.round(-remain) + ' de más';
+
+    const pct = state.goal > 0 ? Math.min(100, (totals.kcal / state.goal) * 100) : 0;
+    const bar = document.getElementById('goalBar');
+    bar.style.width = pct + '%';
+    bar.classList.toggle('over', totals.kcal > state.goal);
+
+    const list = document.getElementById('entryList');
+    if (state.entries.length === 0) {
+      list.innerHTML = '<div class="empty-note">Todavía no registraste nada — escaneá algo de la despensa.</div>';
+      return;
+    }
+    list.innerHTML = state.entries.slice().reverse().map(e => `
+      <div class="entry">
+        <div>
+          <div class="name">${escapeHtml(e.name)}</div>
+          <div class="meta">${escapeHtml(e.brand || '')}${e.brand ? ' · ' : ''}${escapeHtml(e.servingLabel)}</div>
+        </div>
+        <div class="kcal">${Math.round(e.kcal)}</div>
+        <button class="del" data-id="${e.id}">✕</button>
+      </div>
+    `).join('');
+    list.querySelectorAll('.del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.entries = state.entries.filter(e => e.id !== btn.dataset.id);
+        render();
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str == null ? '' : str;
+    return d.innerHTML;
+  }
+
+  // ---- Escáner ----
+  let html5Qrcode = null;
+  const scannerVeil = document.getElementById('scannerVeil');
+  const scanBtn = document.getElementById('scanBtn');
+  const scannerClose = document.getElementById('scannerClose');
+
+  scanBtn.addEventListener('click', startScanner);
+  scannerClose.addEventListener('click', stopScanner);
+
+  function startScanner() {
+    scannerVeil.classList.remove('hidden');
+    html5Qrcode = new Html5Qrcode('reader', { formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128
+    ], verbose: false });
+
+    html5Qrcode.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 260, height: 160 } },
+      (decodedText) => {
+        stopScanner();
+        lookupBarcode(decodedText);
+      },
+      () => {} // ignorar fallos de escaneo cuadro a cuadro
+    ).catch(err => {
+      scannerVeil.classList.add('hidden');
+      alert('Cámara no disponible: ' + err + '\nTambién podés escribir el número de código de barras abajo.');
+    });
+  }
+
+  function stopScanner() {
+    if (html5Qrcode) {
+      html5Qrcode.stop().then(() => html5Qrcode.clear()).catch(() => {});
+    }
+    scannerVeil.classList.add('hidden');
+  }
+
+  // ---- Búsqueda en Open Food Facts ----
+  const sheetVeil = document.getElementById('sheetVeil');
+  const sheetContent = document.getElementById('sheetContent');
+
+  async function lookupBarcode(code) {
+    showStatusSheet('Buscando ' + code + ' …');
+    const cc = state.country;
+    const url = cc === 'world'
+      ? `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
+      : `https://${cc}.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.status !== 1 || !data.product) {
+        showNotFoundSheet(code);
+        return;
+      }
+      showConfirmSheet(data.product, code);
+    } catch (err) {
+      showErrorSheet(code);
+    }
+  }
+
+  function showStatusSheet(msg) {
+    sheetVeil.classList.remove('hidden');
+    sheetContent.innerHTML = `<div class="status-line">${escapeHtml(msg)}</div>`;
+  }
+
+  function showNotFoundSheet(code) {
+    sheetContent.innerHTML = `
+      <h2>No está en la base de datos</h2>
+      <div class="brand">El código ${escapeHtml(code)} todavía no figura en Open Food Facts.</div>
+      <div class="sheet-actions">
+        <button class="btn-cancel" id="sheetClose">Cerrar</button>
+      </div>
+    `;
+    document.getElementById('sheetClose').addEventListener('click', closeSheet);
+  }
+
+  function showErrorSheet(code) {
+    sheetContent.innerHTML = `
+      <h2>Falló la búsqueda</h2>
+      <div class="brand">No se pudo contactar a Open Food Facts para ${escapeHtml(code)}. Revisá tu conexión e intentá de nuevo.</div>
+      <div class="sheet-actions">
+        <button class="btn-cancel" id="sheetClose">Cerrar</button>
+      </div>
+    `;
+    document.getElementById('sheetClose').addEventListener('click', closeSheet);
+  }
+
+  function closeSheet() {
+    sheetVeil.classList.add('hidden');
+  }
+
+  document.getElementById('sheetVeil').addEventListener('click', (e) => {
+    if (e.target.id === 'sheetVeil') closeSheet();
+  });
+
+  function showConfirmSheet(product, code) {
+    const nutriments = product.nutriments || {};
+    const per100 = {
+      kcal: nutriments['energy-kcal_100g'] ?? nutriments['energy-kcal'] ?? 0,
+      protein: nutriments['proteins_100g'] ?? 0,
+      carbs: nutriments['carbohydrates_100g'] ?? 0,
+      fat: nutriments['fat_100g'] ?? 0
+    };
+    const servingSizeG = parseServingGrams(product.serving_size);
+    let servings = 1;
+
+    function currentGrams() {
+      return servingSizeG ? servingSizeG * servings : 100 * servings;
+    }
+
+    function scaled() {
+      const grams = currentGrams();
+      const factor = grams / 100;
+      return {
+        kcal: per100.kcal * factor,
+        protein: per100.protein * factor,
+        carbs: per100.carbs * factor,
+        fat: per100.fat * factor
+      };
+    }
+
+    function renderSheetBody() {
+      const s = scaled();
+      const servingLabel = servingSizeG
+        ? `${Math.round(servingSizeG * servings)}g (${servings} porción${servings > 1 ? 'es' : ''})`
+        : `${Math.round(100 * servings)}g`;
+
+      sheetContent.innerHTML = `
+        <h2>${escapeHtml(product.product_name || 'Producto sin nombre')}</h2>
+        <div class="brand">${escapeHtml(product.brands || 'Sin marca listada')} · ${escapeHtml(code)}</div>
+        <div class="grid">
+          <div class="stat"><div class="l">CALORÍAS</div><div class="v">${Math.round(s.kcal)} kcal</div></div>
+          <div class="stat"><div class="l">PROTEÍNA</div><div class="v">${Math.round(s.protein)}g</div></div>
+          <div class="stat"><div class="l">CARBOS</div><div class="v">${Math.round(s.carbs)}g</div></div>
+          <div class="stat"><div class="l">GRASA</div><div class="v">${Math.round(s.fat)}g</div></div>
+        </div>
+        <div class="servings-row">
+          <button id="servMinus">−</button>
+          <span>${servingLabel}</span>
+          <button id="servPlus">+</button>
+        </div>
+        <div class="sheet-actions">
+          <button class="btn-cancel" id="sheetCancel">Cancelar</button>
+          <button class="btn-add" id="sheetAdd">Agregar al registro</button>
+        </div>
+      `;
+
+      document.getElementById('servMinus').addEventListener('click', () => {
+        if (servings > 0.5) { servings = Math.round((servings - 0.5) * 10) / 10; renderSheetBody(); }
+      });
+      document.getElementById('servPlus').addEventListener('click', () => {
+        servings = Math.round((servings + 0.5) * 10) / 10; renderSheetBody();
+      });
+      document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+      document.getElementById('sheetAdd').addEventListener('click', () => {
+        const s = scaled();
+        state.entries.push({
+          id: 'e' + Date.now(),
+          name: product.product_name || 'Producto sin nombre',
+          brand: product.brands || '',
+          kcal: s.kcal,
+          protein: s.protein,
+          carbs: s.carbs,
+          fat: s.fat,
+          servingLabel: servingLabel
+        });
+        closeSheet();
+        render();
+      });
+    }
+
+    renderSheetBody();
+    sheetVeil.classList.remove('hidden');
+  }
+
+  function parseServingGrams(servingSize) {
+    if (!servingSize) return null;
+    const match = String(servingSize).match(/([\d.]+)\s*g/i);
+    return match ? parseFloat(match[1]) : null;
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
