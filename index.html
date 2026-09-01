@@ -264,10 +264,20 @@
   #reader {
     width: 100%;
     max-width: 380px;
-    min-height: 280px;
+    height: 320px;
     border-radius: var(--radius);
     overflow: hidden;
     border: 2px solid var(--paper);
+    position: relative;
+    background: #000;
+  }
+  #reader video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+  #reader img {
+    display: none !important;
   }
   .scanner-hint {
     color: var(--paper);
@@ -596,10 +606,7 @@
     ], verbose: false });
 
     html5Qrcode.start(
-      {
-        facingMode: 'environment',
-        advanced: [{ focusMode: 'continuous' }]
-      },
+      { facingMode: 'environment' },
       {
         fps: 10,
         qrbox: { width: 250, height: 120 }
@@ -610,22 +617,8 @@
       },
       () => {} // ignorar fallos de escaneo cuadro a cuadro
     ).catch(err => {
-      // Reintentar sin la restricción de enfoque avanzada por si el dispositivo no la soporta
-      html5Qrcode.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 120 }
-        },
-        (decodedText) => {
-          stopScanner();
-          lookupBarcode(decodedText);
-        },
-        () => {}
-      ).catch(err2 => {
-        scannerVeil.classList.add('hidden');
-        alert('Cámara no disponible: ' + err2 + '\nTambién podés escribir el número de código de barras abajo.');
-      });
+      scannerVeil.classList.add('hidden');
+      alert('Cámara no disponible: ' + err + '\nTambién podés escribir el número de código de barras abajo.');
     });
   }
 
