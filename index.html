@@ -516,7 +516,7 @@
 <!-- Overlay del escáner -->
 <div class="scanner-veil hidden" id="scannerVeil">
   <div id="reader"></div>
-  <div class="scanner-hint">Sostené el código de barras plano dentro del recuadro, a unos centímetros de la cámara.</div>
+  <div class="scanner-hint">Sostené el código de barras BIEN horizontal (no inclinado), plano y a unos centímetros de la cámara. Si no engancha, girá el envase un poco.</div>
   <button class="scanner-close" id="scannerClose">Cerrar</button>
 </div>
 
@@ -625,7 +625,12 @@
       { facingMode: 'environment' },
       {
         fps: 10,
-        qrbox: { width: 250, height: 120 }
+        qrbox: function(viewfinderWidth, viewfinderHeight) {
+          // Cubrimos la mayor parte posible del cuadro, no solo una franja angosta,
+          // para que detecte el código sin importar si quedó más horizontal o más cuadrado.
+          const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.8);
+          return { width: size, height: size };
+        }
       },
       (decodedText) => {
         stopScanner();
@@ -657,7 +662,33 @@
     return res.json();
   }
 
+  // ---- Caché personal de cargas manuales (para no volver a preguntar por lo mismo) ----
+  async function getLocalProduct(code) {
+    try {
+      const result = await window.storage.get('producto:' + code, false);
+      return result ? JSON.parse(result.value) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function saveLocalProduct(code, data) {
+    try {
+      await window.storage.set('producto:' + code, JSON.stringify(data), false);
+    } catch (err) {
+      // si falla el guardado local, no interrumpimos el flujo — solo no queda cacheado
+    }
+  }
+
   async function lookupBarcode(code) {
+    // Primero miramos si ya lo cargamos nosotros antes
+    showStatusSheet('Buscando ' + code + ' …');
+    const local = await getLocalProduct(code);
+    if (local) {
+      showManualEntrySheet(code, local.name, local);
+      return;
+    }
+
     // Prueba en orden: España, Argentina, y por último la base global.
     const chain = ['es', 'ar', 'world'];
     for (let i = 0; i < chain.length; i++) {
@@ -713,8 +744,8 @@
     document.getElementById('sheetManual').addEventListener('click', () => showManualEntrySheet(code, ''));
   }
 
-  function showManualEntrySheet(code, prefillName) {
-    let unitSystem = 'metric';
+  function showManualEntrySheet(code, prefillName, prefillData) {
+    let unitSystem = (prefillData && prefillData.unitSystem) || 'metric';
 
     function unitOptions() {
       return unitSystem === 'metric'
@@ -724,25 +755,26 @@
 
     function renderForm() {
       const units = unitOptions();
+      const pf = prefillData || {};
       sheetContent.innerHTML = `
-        <h2>Cargar manualmente</h2>
+        <h2>${prefillData ? 'Ya la tenías cargada' : 'Cargar manualmente'}</h2>
         <div class="brand">Código ${escapeHtml(code)}</div>
-        <input type="text" id="manName" class="manual-form-input" placeholder="Nombre del producto" value="${escapeHtml(prefillName)}">
+        <input type="text" id="manName" class="manual-form-input" placeholder="Nombre del producto" value="${escapeHtml(prefillName || '')}">
         <div class="unit-toggle-row">
           <button type="button" class="unit-toggle-btn ${unitSystem === 'metric' ? 'active' : ''}" id="unitMetric">Métrico</button>
           <button type="button" class="unit-toggle-btn ${unitSystem === 'imperial' ? 'active' : ''}" id="unitImperial">Imperial</button>
         </div>
         <div class="serving-input-row">
-          <input type="number" id="manServingAmount" class="manual-form-input serving-amount" placeholder="Cantidad" value="100" inputmode="decimal">
+          <input type="number" id="manServingAmount" class="manual-form-input serving-amount" placeholder="Cantidad" value="${pf.servingAmount || '100'}" inputmode="decimal">
           <select id="manServingUnit" class="manual-form-input serving-unit">
-            ${units.map(u => `<option value="${u}">${u}</option>`).join('')}
+            ${units.map(u => `<option value="${u}" ${pf.servingUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
           </select>
         </div>
         <div class="grid">
-          <div class="stat"><div class="l">CALORÍAS</div><input type="number" id="manKcal" class="manual-form-input" placeholder="0" inputmode="decimal"></div>
-          <div class="stat"><div class="l">PROTEÍNA (g)</div><input type="number" id="manProtein" class="manual-form-input" placeholder="0" inputmode="decimal"></div>
-          <div class="stat"><div class="l">CARBOS (g)</div><input type="number" id="manCarbs" class="manual-form-input" placeholder="0" inputmode="decimal"></div>
-          <div class="stat"><div class="l">GRASA (g)</div><input type="number" id="manFat" class="manual-form-input" placeholder="0" inputmode="decimal"></div>
+          <div class="stat"><div class="l">CALORÍAS</div><input type="number" id="manKcal" class="manual-form-input" placeholder="0" inputmode="decimal" value="${pf.kcal || ''}"></div>
+          <div class="stat"><div class="l">PROTEÍNA (g)</div><input type="number" id="manProtein" class="manual-form-input" placeholder="0" inputmode="decimal" value="${pf.protein || ''}"></div>
+          <div class="stat"><div class="l">CARBOS (g)</div><input type="number" id="manCarbs" class="manual-form-input" placeholder="0" inputmode="decimal" value="${pf.carbs || ''}"></div>
+          <div class="stat"><div class="l">GRASA (g)</div><input type="number" id="manFat" class="manual-form-input" placeholder="0" inputmode="decimal" value="${pf.fat || ''}"></div>
         </div>
         <div class="sheet-actions">
           <button class="btn-cancel" id="sheetCancel">Cancelar</button>
@@ -760,6 +792,10 @@
         const protein = parseFloat(document.getElementById('manProtein').value) || 0;
         const carbs = parseFloat(document.getElementById('manCarbs').value) || 0;
         const fat = parseFloat(document.getElementById('manFat').value) || 0;
+
+        // Guardamos esta carga en el caché local para no volver a preguntar la próxima vez
+        saveLocalProduct(code, { name, servingAmount, servingUnit, unitSystem, kcal, protein, carbs, fat });
+
         state.entries.push({
           id: 'e' + Date.now(),
           name: name,
