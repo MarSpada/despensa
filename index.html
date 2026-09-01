@@ -595,16 +595,30 @@
     ], verbose: false });
 
     html5Qrcode.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 260, height: 160 } },
+      {
+        facingMode: 'environment',
+        advanced: [{ focusMode: 'continuous' }]
+      },
+      { fps: 10, qrbox: { width: 300, height: 140 }, aspectRatio: 1.7777778 },
       (decodedText) => {
         stopScanner();
         lookupBarcode(decodedText);
       },
       () => {} // ignorar fallos de escaneo cuadro a cuadro
     ).catch(err => {
-      scannerVeil.classList.add('hidden');
-      alert('Cámara no disponible: ' + err + '\nTambién podés escribir el número de código de barras abajo.');
+      // Reintentar sin la restricción de enfoque avanzada por si el dispositivo no la soporta
+      html5Qrcode.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 300, height: 140 }, aspectRatio: 1.7777778 },
+        (decodedText) => {
+          stopScanner();
+          lookupBarcode(decodedText);
+        },
+        () => {}
+      ).catch(err2 => {
+        scannerVeil.classList.add('hidden');
+        alert('Cámara no disponible: ' + err2 + '\nTambién podés escribir el número de código de barras abajo.');
+      });
     });
   }
 
@@ -619,16 +633,24 @@
   const sheetVeil = document.getElementById('sheetVeil');
   const sheetContent = document.getElementById('sheetContent');
 
-  async function lookupBarcode(code) {
-    showStatusSheet('Buscando ' + code + ' …');
-    const cc = state.country;
+  async function fetchProduct(code, cc) {
     const url = cc === 'world'
       ? `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
       : `https://${cc}.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`;
+    const res = await fetch(url);
+    return res.json();
+  }
 
+  async function lookupBarcode(code) {
+    showStatusSheet('Buscando ' + code + ' …');
+    const cc = state.country;
     try {
-      const res = await fetch(url);
-      const data = await res.json();
+      let data = await fetchProduct(code, cc);
+      if ((data.status !== 1 || !data.product) && cc !== 'world') {
+        // No apareció en la base regional — probamos en la base global antes de rendirnos
+        showStatusSheet('No está en la base de ' + (cc === 'ar' ? 'Argentina' : 'España') + ' — probando en la base global …');
+        data = await fetchProduct(code, 'world');
+      }
       if (data.status !== 1 || !data.product) {
         showNotFoundSheet(code);
         return;
@@ -647,12 +669,16 @@
   function showNotFoundSheet(code) {
     sheetContent.innerHTML = `
       <h2>No está en la base de datos</h2>
-      <div class="brand">El código ${escapeHtml(code)} todavía no figura en Open Food Facts.</div>
+      <div class="brand">El código ${escapeHtml(code)} no figura en Open Food Facts (ni regional ni global). Si el envase tiene otro código impreso además del de barras, probá con ese en la búsqueda manual.</div>
       <div class="sheet-actions">
         <button class="btn-cancel" id="sheetClose">Cerrar</button>
+        <button class="btn-add" id="sheetVerify">Ver en Open Food Facts</button>
       </div>
     `;
     document.getElementById('sheetClose').addEventListener('click', closeSheet);
+    document.getElementById('sheetVerify').addEventListener('click', () => {
+      window.open('https://world.openfoodfacts.org/product/' + encodeURIComponent(code), '_blank');
+    });
   }
 
   function showErrorSheet(code) {
