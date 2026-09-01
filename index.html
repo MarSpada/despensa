@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Despensa — contador de calorías con código de barras gratis</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <style>
@@ -71,28 +74,6 @@
     color: var(--ink-soft);
     font-style: italic;
     margin: 6px 0 22px;
-  }
-
-  .region-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 22px;
-  }
-  .region-btn {
-    flex: 1;
-    padding: 9px 6px;
-    background: transparent;
-    border: 1px solid var(--ink);
-    border-radius: var(--radius);
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-    letter-spacing: 0.03em;
-    color: var(--ink);
-    cursor: pointer;
-  }
-  .region-btn.active {
-    background: var(--ink);
-    color: var(--paper);
   }
 
   .goal-strip {
@@ -349,6 +330,55 @@
     font-size: 16px;
     font-weight: 700;
   }
+  .manual-form-input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--card);
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .sheet .stat input.manual-form-input {
+    margin-bottom: 0;
+    border: none;
+    padding: 2px 0 0;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .unit-toggle-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .unit-toggle-btn {
+    flex: 1;
+    padding: 8px 6px;
+    background: transparent;
+    border: 1px solid var(--ink);
+    border-radius: var(--radius);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .unit-toggle-btn.active {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .serving-input-row {
+    display: flex;
+    gap: 8px;
+  }
+  .serving-input-row .serving-amount {
+    flex: 2;
+  }
+  .serving-input-row .serving-unit {
+    flex: 1;
+  }
   .servings-row {
     display: flex;
     align-items: center;
@@ -444,12 +474,6 @@
   </div>
   <div class="subline">escaneo de códigos de barras gratis · Open Food Facts</div>
 
-  <div class="region-row">
-    <button class="region-btn active" data-cc="es">España</button>
-    <button class="region-btn" data-cc="ar">Argentina</button>
-    <button class="region-btn" data-cc="world">Global</button>
-  </div>
-
   <div class="goal-strip">
     <div>
       <div class="figure" id="totalKcal">0<small> kcal</small></div>
@@ -504,7 +528,6 @@
 <script>
 (function() {
   const state = {
-    country: 'es',
     goal: 2000,
     entries: [] // {id, name, brand, kcal, protein, carbs, fat, servingLabel}
   };
@@ -512,13 +535,6 @@
   const todayDate = document.getElementById('todayDate');
   todayDate.textContent = new Date().toLocaleDateString('es-ES', { weekday: 'short', month: 'short', day: 'numeric' });
 
-  document.querySelectorAll('.region-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.country = btn.dataset.cc;
-    });
-  });
 
   const goalInput = document.getElementById('goalInput');
   goalInput.addEventListener('input', () => {
@@ -642,23 +658,41 @@
   }
 
   async function lookupBarcode(code) {
-    showStatusSheet('Buscando ' + code + ' …');
-    const cc = state.country;
-    try {
-      let data = await fetchProduct(code, cc);
-      if ((data.status !== 1 || !data.product) && cc !== 'world') {
-        // No apareció en la base regional — probamos en la base global antes de rendirnos
-        showStatusSheet('No está en la base de ' + (cc === 'ar' ? 'Argentina' : 'España') + ' — probando en la base global …');
-        data = await fetchProduct(code, 'world');
+    // Prueba en orden: España, Argentina, y por último la base global.
+    const chain = ['es', 'ar', 'world'];
+    for (let i = 0; i < chain.length; i++) {
+      const cc = chain[i];
+      showStatusSheet(
+        cc === 'world'
+          ? 'Buscando ' + code + ' en la base global …'
+          : 'Buscando ' + code + ' en ' + (cc === 'es' ? 'España' : 'Argentina') + ' …'
+      );
+      try {
+        const data = await fetchProduct(code, cc);
+        if (data.status === 1 && data.product) {
+          const p = data.product;
+          const n = p.nutriments || {};
+          const hasUsableData = p.product_name && (n['energy-kcal_100g'] || n['energy-kcal']);
+          if (hasUsableData) {
+            showConfirmSheet(p, code);
+            return;
+          }
+          // Existe el código pero sin datos usables — seguimos probando en las otras bases
+          if (i === chain.length - 1) {
+            showManualEntrySheet(code, p.product_name || '');
+            return;
+          }
+          continue;
+        }
+      } catch (err) {
+        if (i === chain.length - 1) {
+          showErrorSheet(code);
+          return;
+        }
+        continue;
       }
-      if (data.status !== 1 || !data.product) {
-        showNotFoundSheet(code);
-        return;
-      }
-      showConfirmSheet(data.product, code);
-    } catch (err) {
-      showErrorSheet(code);
     }
+    showNotFoundSheet(code);
   }
 
   function showStatusSheet(msg) {
@@ -669,16 +703,80 @@
   function showNotFoundSheet(code) {
     sheetContent.innerHTML = `
       <h2>No está en la base de datos</h2>
-      <div class="brand">El código ${escapeHtml(code)} no figura en Open Food Facts (ni regional ni global). Si el envase tiene otro código impreso además del de barras, probá con ese en la búsqueda manual.</div>
+      <div class="brand">El código ${escapeHtml(code)} no figura en Open Food Facts (ni regional ni global).</div>
       <div class="sheet-actions">
         <button class="btn-cancel" id="sheetClose">Cerrar</button>
-        <button class="btn-add" id="sheetVerify">Ver en Open Food Facts</button>
+        <button class="btn-add" id="sheetManual">Cargarlo yo mismo</button>
       </div>
     `;
     document.getElementById('sheetClose').addEventListener('click', closeSheet);
-    document.getElementById('sheetVerify').addEventListener('click', () => {
-      window.open('https://world.openfoodfacts.org/product/' + encodeURIComponent(code), '_blank');
-    });
+    document.getElementById('sheetManual').addEventListener('click', () => showManualEntrySheet(code, ''));
+  }
+
+  function showManualEntrySheet(code, prefillName) {
+    let unitSystem = 'metric';
+
+    function unitOptions() {
+      return unitSystem === 'metric'
+        ? ['g', 'ml']
+        : ['oz', 'fl oz'];
+    }
+
+    function renderForm() {
+      const units = unitOptions();
+      sheetContent.innerHTML = `
+        <h2>Cargar manualmente</h2>
+        <div class="brand">Código ${escapeHtml(code)}</div>
+        <input type="text" id="manName" class="manual-form-input" placeholder="Nombre del producto" value="${escapeHtml(prefillName)}">
+        <div class="unit-toggle-row">
+          <button type="button" class="unit-toggle-btn ${unitSystem === 'metric' ? 'active' : ''}" id="unitMetric">Métrico</button>
+          <button type="button" class="unit-toggle-btn ${unitSystem === 'imperial' ? 'active' : ''}" id="unitImperial">Imperial</button>
+        </div>
+        <div class="serving-input-row">
+          <input type="number" id="manServingAmount" class="manual-form-input serving-amount" placeholder="Cantidad" value="100" inputmode="decimal">
+          <select id="manServingUnit" class="manual-form-input serving-unit">
+            ${units.map(u => `<option value="${u}">${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="grid">
+          <div class="stat"><div class="l">CALORÍAS</div><input type="number" id="manKcal" class="manual-form-input" placeholder="0" inputmode="decimal"></div>
+          <div class="stat"><div class="l">PROTEÍNA (g)</div><input type="number" id="manProtein" class="manual-form-input" placeholder="0" inputmode="decimal"></div>
+          <div class="stat"><div class="l">CARBOS (g)</div><input type="number" id="manCarbs" class="manual-form-input" placeholder="0" inputmode="decimal"></div>
+          <div class="stat"><div class="l">GRASA (g)</div><input type="number" id="manFat" class="manual-form-input" placeholder="0" inputmode="decimal"></div>
+        </div>
+        <div class="sheet-actions">
+          <button class="btn-cancel" id="sheetCancel">Cancelar</button>
+          <button class="btn-add" id="sheetAddManual">Agregar al registro</button>
+        </div>
+      `;
+      document.getElementById('unitMetric').addEventListener('click', () => { unitSystem = 'metric'; renderForm(); });
+      document.getElementById('unitImperial').addEventListener('click', () => { unitSystem = 'imperial'; renderForm(); });
+      document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+      document.getElementById('sheetAddManual').addEventListener('click', () => {
+        const name = document.getElementById('manName').value.trim() || 'Producto sin nombre';
+        const servingAmount = document.getElementById('manServingAmount').value.trim() || '100';
+        const servingUnit = document.getElementById('manServingUnit').value;
+        const kcal = parseFloat(document.getElementById('manKcal').value) || 0;
+        const protein = parseFloat(document.getElementById('manProtein').value) || 0;
+        const carbs = parseFloat(document.getElementById('manCarbs').value) || 0;
+        const fat = parseFloat(document.getElementById('manFat').value) || 0;
+        state.entries.push({
+          id: 'e' + Date.now(),
+          name: name,
+          brand: '',
+          kcal: kcal,
+          protein: protein,
+          carbs: carbs,
+          fat: fat,
+          servingLabel: servingAmount + servingUnit + ' · cargado a mano'
+        });
+        closeSheet();
+        render();
+      });
+    }
+
+    renderForm();
+    sheetVeil.classList.remove('hidden');
   }
 
   function showErrorSheet(code) {
